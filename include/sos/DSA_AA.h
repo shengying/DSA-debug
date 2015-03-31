@@ -26,6 +26,7 @@ private:
     CallSite MapCS;
     std::multimap<DSNode*, const DSNode*> CallerCalleeMap;
 
+    DSGraph *getGraphForValue(const Value *V);
 public:
 	static char ID;
 
@@ -37,6 +38,13 @@ public:
 	//ModRefResult getModRefInfo (llvm::ImmutableCallSite cs, const Location &loc);
 
 	DSAAA(): ModulePass(ID), TD(nullptr), BU(nullptr), dataLayout(nullptr) {}
+	~DSAAA() {
+        InvalidateCache();
+	}
+	void InvalidateCache() {
+      MapCS = CallSite();
+      CallerCalleeMap.clear();
+    }
 	bool runOnModule(llvm::Module &M) override;
 	void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
 	void* getAdjustedAnalysisPointer(llvm::AnalysisID PI) override;

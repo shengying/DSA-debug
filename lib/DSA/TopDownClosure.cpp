@@ -23,6 +23,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Support/Debug.h"
 using namespace llvm;
 
 #define TIME_REGION(VARNAME, DESC)
@@ -180,6 +181,11 @@ bool TDDataStructures::runOnModule(Module &M) {
   // CBU contains the correct call graph.
   // Restore it, so that subsequent passes and clients can get it.
   restoreCorrectCallGraph();
+
+  /// Added by Zhiyuan: print out the DSGraph.
+  if (llvm::DebugFlag) {
+    print(errs(), &M);
+  }
   return false;
 }
 

@@ -26,7 +26,6 @@
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/Module.h"
 
-namespace smack {
 
 using namespace std;
 
@@ -66,49 +65,31 @@ private:
   llvm::TDDataStructures *TD;
   llvm::BUDataStructures *BU;
   llvm::DSNodeEquivs *nodeEqs;
+  const llvm::DataLayout* dataLayout;
   vector<const llvm::DSNode*> staticInits;
   vector<const llvm::DSNode*> memcpys;
 
 public:
   static char ID;
-  DSAAliasAnalysis() : ModulePass(ID) {}
+  DSAAliasAnalysis() : ModulePass(ID), TD(nullptr), BU(nullptr), dataLayout(nullptr) {}
 
-  virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const {
-    llvm::AliasAnalysis::getAnalysisUsage(AU);
-    AU.setPreservesAll();
-    AU.addRequiredTransitive<llvm::TDDataStructures>();
-    AU.addRequiredTransitive<llvm::BUDataStructures>();
-    AU.addRequiredTransitive<llvm::DSNodeEquivs>();
-  }
+  void getAnalysisUsage(llvm::AnalysisUsage &AU) const override;
+// {
+//    llvm::AliasAnalysis::getAnalysisUsage(AU);
+//    AU.setPreservesAll();
+//    AU.addRequiredTransitive<llvm::TDDataStructures>();
+//    AU.addRequiredTransitive<llvm::BUDataStructures>();
+//    AU.addRequiredTransitive<llvm::DSNodeEquivs>();
+//  }
 
-  virtual bool runOnModule(llvm::Module &M) {
-    InitializeAliasAnalysis(this);
-    TD = &getAnalysis<llvm::TDDataStructures>();
-    BU = &getAnalysis<llvm::BUDataStructures>();
-    nodeEqs = &getAnalysis<llvm::DSNodeEquivs>();
-    memcpys = collectMemcpys(M, new MemcpyCollector(nodeEqs));
-    staticInits = collectStaticInits(M);
-    llvm::errs() << "*** DSAliasAnalysis.h\n";
-    for (llvm::Module::iterator F = M.begin(), E = M.end(); F != E; ++F) {
-        if (F->isDeclaration()) {
-            continue;
-        }
-        llvm::errs() << "[SDG] Evaluating AA for function \"" << F->getName() << "\"...\n";
-        AAEval &aae = getAnalysis<AAEval>(*F);
-    }
-    return false;
-  }
-
-
+  bool runOnModule(llvm::Module &M) override;
+  llvm::AliasAnalysis::AliasResult alias(const Location &LocA, const Location &LocB);
+ private:
   llvm::DSNode *getNode(const llvm::Value* v);
   bool isAlloced(const llvm::Value* v);
   bool isExternal(const llvm::Value* v);
   bool isSingletonGlobal(const llvm::Value *V);
 
-  virtual AliasResult alias(const Location &LocA, const Location &LocB);
-  AliasResult alias(const llvm::Value *V1, uint64_t V1Size,
-                    const llvm::Value *V2, uint64_t V2Size);
-private:
   bool isMemcpyd(const llvm::DSNode* n);
   bool isStaticInitd(const llvm::DSNode* n);
   vector<const llvm::DSNode*> collectMemcpys(llvm::Module &M, MemcpyCollector* mcc);
@@ -118,6 +99,5 @@ private:
   unsigned getOffset(const Location* l);
   bool disjoint(const Location* l1, const Location* l2);
 };
-}
 
 #endif

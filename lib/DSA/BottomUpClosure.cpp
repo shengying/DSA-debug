@@ -128,6 +128,11 @@ bool BUDataStructures::runOnModuleInternal(Module& M) {
   callgraph.buildSCCs();
   callgraph.buildRoots();
 
+  /// Added by Zhiyuan: print out the DSGraph.
+  if (llvm::DebugFlag) {
+    print(errs(), &M);
+  }
+
   return false;
 }
 
@@ -246,12 +251,12 @@ BUDataStructures::postOrderInline (Module & M) {
     if (InitList) {
       for (unsigned i = 0, e = InitList->getNumOperands(); i != e; ++i)
         if (ConstantStruct *CS = dyn_cast<ConstantStruct>(InitList->getOperand(i))) {
-          if (CS->getNumOperands() != 2) 
+          if (CS->getNumOperands() != 2)
             break; // Not array of 2-element structs.
           Constant *FP = CS->getOperand(1);
           if (FP->isNullValue())
             break;  // Found a null terminator, exit.
-   
+
           if (ConstantExpr *CE = dyn_cast<ConstantExpr>(FP))
             if (CE->isCast())
               FP = CE->getOperand(0);
@@ -274,7 +279,7 @@ BUDataStructures::postOrderInline (Module & M) {
       // record one global per DSNode.
       //
       formGlobalECs();
-      // propogte information calculated 
+      // propogte information calculated
       // from the globals graph to the other graphs.
       for (Module::iterator F = M.begin(); F != M.end(); ++F) {
         if (!(F->isDeclaration())){
@@ -291,7 +296,7 @@ BUDataStructures::postOrderInline (Module & M) {
       }
     }
   }
- 
+
   //
   // Start the post order traversal with the main() function.  If there is no
   // main() function, don't worry; we'll have a separate traversal for inlining
@@ -486,7 +491,7 @@ BUDataStructures::calculateGraphs (const Function *F,
         for (DSGraph::retnodes_iterator I = NFG->retnodes_begin(),
                E = NFG->retnodes_end(); I != E; ++I)
           setDSGraph(*I->first, SCCGraph);
-        
+
         SCCGraph->spliceFrom(NFG);
         delete NFG;
         ++SCCSize;
@@ -715,7 +720,7 @@ void BUDataStructures::calculateGraph(DSGraph* Graph) {
 
   //
   // Update the callgraph with the new information that we have gleaned.
-  // NOTE : This must be called before removeDeadNodes, so that no 
+  // NOTE : This must be called before removeDeadNodes, so that no
   // information is lost due to deletion of DSCallNodes.
   Graph->buildCallGraph(callgraph, GlobalFunctionList, filterCallees);
 

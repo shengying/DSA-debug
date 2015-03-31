@@ -53,6 +53,10 @@ STATISTIC(NumBoringIntToPtr, "Number of inttoptr used only in cmp");
 //STATISTIC(NumSimpleIntToPtr, "Number of inttoptr from ptrtoint");
 STATISTIC(NumIgnoredInst,       "Number of instructions ignored");
 
+
+  ///added by Zhiyuan @ Mar 23, 2015
+STATISTIC (NumMemInst, "Number of memory instructions (load, store, alloca)");
+
 RegisterPass<LocalDataStructures>
 X("dsa-local", "Local Data Structure Analysis");
 
@@ -87,8 +91,8 @@ namespace {
     /// createNode - Create a new DSNode, ensuring that it is properly added to
     /// the graph.
     ///
-    DSNode *createNode() 
-    {   
+    DSNode *createNode()
+    {
       DSNode* ret = new DSNode(&G);
       assert(ret->getParentGraph() && "No parent?");
       return ret;
@@ -115,7 +119,12 @@ namespace {
     friend class InstVisitor<GraphBuilder>;
 
     void visitAllocaInst(AllocaInst &AI)
-    { setDestTo(AI, createNode()->setAllocaMarker()); }
+    {
+        /// MemInst: added by Zhiyuan
+        NumMemInst++;
+
+        setDestTo(AI, createNode()->setAllocaMarker());
+    }
 
     //the simple ones
     void visitPHINode(PHINode &PN);
@@ -216,15 +225,15 @@ namespace {
     void mergeFunction(Function* F) { getValueDest(F); }
   };
 
-  /// Traverse the whole DSGraph, and propagate the unknown flags through all 
+  /// Traverse the whole DSGraph, and propagate the unknown flags through all
   /// out edges.
   static void propagateUnknownFlag(DSGraph * G) {
     std::vector<DSNode *> workList;
     DenseSet<DSNode *> visited;
     for (DSGraph::node_iterator I = G->node_begin(), E = G->node_end(); I != E; ++I)
-      if (I->isUnknownNode()) 
+      if (I->isUnknownNode())
         workList.push_back(&*I);
-  
+
     while (!workList.empty()) {
       DSNode * N = workList.back();
       workList.pop_back();
@@ -247,7 +256,7 @@ namespace {
 /// getValueDest - Return the DSNode that the actual value points to.
 ///
 DSNodeHandle GraphBuilder::getValueDest(Value* V) {
-  if (isa<Constant>(V) && cast<Constant>(V)->isNullValue()) 
+  if (isa<Constant>(V) && cast<Constant>(V)->isNullValue())
     return 0;  // Null doesn't point to anything, don't add to ScalarMap!
 
   DSNodeHandle &NH = G.getNodeForValue(V);
@@ -387,6 +396,9 @@ void GraphBuilder::visitLoadInst(LoadInst &LI) {
   // is NULL, do nothing more (this can occur if the load is loading from a
   // NULL pointer constant (bugpoint can generate such code).
   //
+  /// added by Zhiyuan, MemInst
+  NumMemInst++;
+
   DSNodeHandle Ptr = getValueDest(LI.getPointerOperand());
   if (Ptr.isNull()) return; // Load from null
 
@@ -411,6 +423,9 @@ void GraphBuilder::visitLoadInst(LoadInst &LI) {
 }
 
 void GraphBuilder::visitStoreInst(StoreInst &SI) {
+    /// added by Zhiyuan, MemInst
+  NumMemInst++;
+
   Type *StoredTy = SI.getOperand(0)->getType();
   DSNodeHandle Dest = getValueDest(SI.getOperand(1));
   if (Dest.isNull()) return;
@@ -536,7 +551,7 @@ void GraphBuilder::visitVAArgInst(VAArgInst &I) {
 
     if (isa<PointerType>(I.getType()))
       Dest.mergeWith(Ptr);
-    return; 
+    return;
   }
 
   default: {
@@ -570,7 +585,7 @@ void GraphBuilder::visitIntToPtrInst(IntToPtrInst &I) {
     N->setIntToPtrMarker();
     N->setUnknownMarker();
   }
-  setDestTo(I, N); 
+  setDestTo(I, N);
 }
 
 void GraphBuilder::visitPtrToIntInst(PtrToIntInst& I) {
@@ -683,6 +698,9 @@ void GraphBuilder::visitExtractValueInst(ExtractValueInst& I) {
 }
 
 void GraphBuilder::visitGetElementPtrInst(User &GEP) {
+//  /// added by Zhiyuan
+  NumMemInst++;
+
   //
   // Ensure that the indexed pointer has a DSNode.
   //
@@ -691,9 +709,9 @@ void GraphBuilder::visitGetElementPtrInst(User &GEP) {
     NodeH = createNode();
 
   //
-  // There are a few quick and easy cases to handle.  If  the DSNode of the 
-  // indexed pointer is already folded, then we know that the result of the 
-  // GEP will have the same offset into the same DSNode 
+  // There are a few quick and easy cases to handle.  If  the DSNode of the
+  // indexed pointer is already folded, then we know that the result of the
+  // GEP will have the same offset into the same DSNode
   // as the indexed pointer.
   //
 
@@ -902,10 +920,16 @@ void GraphBuilder::visitGetElementPtrInst(User &GEP) {
 
 
 void GraphBuilder::visitCallInst(CallInst &CI) {
+//  /// added by Zhiyuan
+  NumMemInst++;
+
   visitCallSite(&CI);
 }
 
 void GraphBuilder::visitInvokeInst(InvokeInst &II) {
+//  /// added by Zhiyuan
+  NumMemInst++;
+
   visitCallSite(&II);
 }
 
@@ -1038,7 +1062,7 @@ bool GraphBuilder::visitIntrinsic(CallSite CS, Function *F) {
   case Intrinsic::vaend:
     // TODO: What to do here?
     return true;
-  case Intrinsic::memcpy: 
+  case Intrinsic::memcpy:
   case Intrinsic::memmove: {
     // Merge the first & second arguments, and mark the memory read and
     // modified.
@@ -1093,7 +1117,7 @@ bool GraphBuilder::visitIntrinsic(CallSite CS, Function *F) {
     return true;
 
     //
-    // The return address/frame address aliases with the stack, 
+    // The return address/frame address aliases with the stack,
     // is type-unknown, and should
     // have the unknown flag set since we don't know where it goes.
     //
@@ -1518,6 +1542,11 @@ bool LocalDataStructures::runOnModule(Module &M) {
       Graph->markIncompleteNodes(DSGraph::MarkFormalArgs
                                  |DSGraph::IgnoreGlobals);
     }
+
+  /// Added by Zhiyuan: print out the DSGraph.
+  if (llvm::DebugFlag) {
+    print(errs(), &M);
+  }
 
   return false;
 }

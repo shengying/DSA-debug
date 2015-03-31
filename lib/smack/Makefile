@@ -15,7 +15,7 @@ all: DSAAliasAnalysis.o
 #	$(CXX) -shared *.o -o LLVMDataStructure.a $(LDFLAGS) -fPIC
 
 DSAAliasAnalysis.o:
-	$(CXX) -I../../include -c DSAAliasAnalysis.cpp $(CXXFLAGS)
+	$(CXX) -I../../include -c SmackDSAAA.cpp $(CXXFLAGS)
 
 clean:
 	rm -f *.o *.a
